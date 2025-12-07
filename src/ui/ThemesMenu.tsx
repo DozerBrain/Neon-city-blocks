@@ -1,7 +1,13 @@
 // src/ui/ThemesMenu.tsx
 
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+} from "react-native";
 import { THEMES, type ThemeId } from "../game/ThemeManager";
 
 type Props = {
@@ -25,9 +31,13 @@ export default function ThemesMenu({ current, onSelect, onBack }: Props) {
               style={[styles.themeRow, selected && styles.themeRowSelected]}
               onPress={() => onSelect(item.id)}
             >
-              <View style={[styles.colorDot, { backgroundColor: item.neon }]} />
+              <View
+                style={[styles.colorDot, { backgroundColor: item.neon }]}
+              />
               <Text style={styles.themeName}>{item.name}</Text>
-              {selected && <Text style={styles.selectedLabel}>SELECTED</Text>}
+              {selected && (
+                <Text style={styles.selectedLabel}>SELECTED</Text>
+              )}
             </TouchableOpacity>
           );
         }}

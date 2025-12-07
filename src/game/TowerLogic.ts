@@ -1,18 +1,16 @@
 // src/game/TowerLogic.ts
 
+// Size of each block
 export const BLOCK_SIZE = 60;
 
-// Single tower block
+// One block in the tower
 export type TowerBlock = {
   id: number;
-  level: number; // 0 = base on the platform
-  x: number;     // center X in game coords
+  level: number; // 0 = sitting on the platform, 1 = 1st block above, etc.
+  x: number;     // center X in play-area coordinates
 };
 
-// how far you can miss before it's a fail
-const MISS_THRESHOLD = BLOCK_SIZE * 0.7;
-
-// ----- CREATE INITIAL TOWER -----
+// Create the initial tower with one base block in the middle
 export function createInitialTower(centerX: number): TowerBlock[] {
   return [
     {
@@ -23,72 +21,68 @@ export function createInitialTower(centerX: number): TowerBlock[] {
   ];
 }
 
-// ----- GEOMETRY HELPERS -----
+// Given the platform Y and the block level, return the TOP Y for the block
+// This is used directly as translateY in the styles.
 export function getBlockTopY(platformY: number, level: number): number {
-  // top of level 0 block sits exactly one BLOCK_SIZE above platform
-  return platformY - BLOCK_SIZE - level * BLOCK_SIZE;
+  // level 0: top = platformY - 1*BLOCK_SIZE
+  // level 1: top = platformY - 2*BLOCK_SIZE
+  return platformY - (level + 1) * BLOCK_SIZE;
 }
 
-// ----- LANDING RESULT TYPE -----
-export type LandResult = {
-  blocks: TowerBlock[];
-  dx: number;   // horizontal offset from previous top block
-  miss: boolean;
-};
-
-// ----- LAND BLOCK LOGIC -----
-// IMPORTANT: this is where we *keep* the dropX so it doesn't snap to center
+// Try to land a block at dropX.
+// - If we miss too far -> miss = true
+// - If we hit -> we ADD a new block at the REAL dropX (no snapping to center)
 export function landBlock(
-  currentBlocks: TowerBlock[],
+  blocks: TowerBlock[],
   dropX: number
-): LandResult {
-  const top = currentBlocks[currentBlocks.length - 1];
+): { miss: boolean; blocks: TowerBlock[]; dx: number } {
+  const top = blocks[blocks.length - 1];
   const dx = dropX - top.x;
+  const missThreshold = BLOCK_SIZE * 0.7;
 
-  // Miss → tell caller it's a fail, don't change blocks
-  if (Math.abs(dx) > MISS_THRESHOLD) {
-    return {
-      blocks: currentBlocks,
-      dx,
-      miss: true,
-    };
+  // Too far from the tower -> miss
+  if (Math.abs(dx) > missThreshold) {
+    return { miss: true, blocks, dx };
   }
 
+  // Hit -> ADD at the REAL drop position (NO snapping)
   const newBlock: TowerBlock = {
     id: Date.now(),
     level: top.level + 1,
-    x: dropX, // ← KEY: use the actual drop position, not top.x
+    x: dropX,
   };
 
   return {
-    blocks: [...currentBlocks, newBlock],
-    dx,
     miss: false,
+    blocks: [...blocks, newBlock],
+    dx,
   };
 }
 
-// ----- SCORE HELPERS -----
-export type ScoreState = {
-  score: number;
-  best: number;
-};
-
-export function updateScore(score: number, best: number): ScoreState {
+// Update score and best
+export function updateScore(score: number, best: number) {
   const newScore = score + 1;
-  const newBest = Math.max(best, newScore);
-  return { score: newScore, best: newBest };
+  return {
+    score: newScore,
+    best: Math.max(best, newScore),
+  };
 }
 
-// ----- TILT COMPUTATION -----
-// returns value in [-1, 1], controller turns that into degrees
-export function computeTilt(height: number, dx: number): number {
-  const TILT_TRIGGER_HEIGHT = 4; // when tower tall enough
-  const heightFactor = Math.max(
-    0,
-    Math.min(1, (height - TILT_TRIGGER_HEIGHT) / 10)
-  );
-  const offsetFactor = Math.min(1, Math.abs(dx) / MISS_THRESHOLD);
-  const direction = dx === 0 ? 0 : dx > 0 ? 1 : -1;
+// Compute how much the frame should tilt based on
+// - tower height
+// - how off-center the last block was (dx)
+export function computeTilt(towerHeight: number, dx: number): number {
+  const missThreshold = BLOCK_SIZE * 0.7;
 
-  return direction * heightFactor * offsetFactor; // -1..1
+  // Start tilting only after a few blocks
+  const heightFactor = clamp01((towerHeight - 4) / 10); // 0..1
+  const offsetFactor = clamp01(Math.abs(dx) / missThreshold); // 0..1
+  const direction = dx === 0 ? 0 : dx > 0 ? 1 : -1; // -1 left, 1 right
+
+  // Final tilt in logical -1..1 space (useNeonGameController maps it to degrees)
+  return direction * heightFactor * offsetFactor;
+}
+
+function clamp01(v: number) {
+  return Math.max(0, Math.min(1, v));
 }

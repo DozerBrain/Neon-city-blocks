@@ -4,81 +4,79 @@ import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 
 type Props = {
-  visible: boolean;
   score: number;
-  best: number;
+  bestScore: number;
   onRestart: () => void;
   onMenu: () => void;
 };
 
-export default function GameOver({ visible, score, best, onRestart, onMenu }: Props) {
-  if (!visible) return null;
-
+const GameOver: React.FC<Props> = ({
+  score,
+  bestScore,
+  onRestart,
+  onMenu,
+}) => {
   return (
-    <View style={styles.overlay}>
-      <View style={styles.card}>
-        <Text style={styles.title}>GAME OVER</Text>
-        <Text style={styles.score}>Score: {score}</Text>
-        <Text style={styles.best}>Best: {best}</Text>
+    <View style={styles.container}>
+      <Text style={styles.title}>GAME OVER</Text>
+      <Text style={styles.score}>SCORE: {score}</Text>
+      <Text style={styles.score}>BEST: {bestScore}</Text>
 
-        <TouchableOpacity style={styles.button} onPress={onRestart}>
-          <Text style={styles.buttonText}>RESTART</Text>
-        </TouchableOpacity>
+      <TouchableOpacity style={styles.buttonPrimary} onPress={onRestart}>
+        <Text style={styles.buttonPrimaryText}>RETRY</Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.button, styles.menuButton]} onPress={onMenu}>
-          <Text style={styles.buttonText}>MAIN MENU</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity style={styles.buttonSecondary} onPress={onMenu}>
+        <Text style={styles.buttonSecondaryText}>MENU</Text>
+      </TouchableOpacity>
     </View>
   );
-}
+};
+
+export default GameOver;
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.7)",
+  container: {
+    flex: 1,
+    backgroundColor: "#02020A",
     alignItems: "center",
     justifyContent: "center",
-  },
-  card: {
-    width: "80%",
-    backgroundColor: "#02020A",
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: "#00E5FF",
-    padding: 24,
-    alignItems: "center",
+    paddingHorizontal: 24,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     color: "#00E5FF",
-    fontWeight: "bold",
-    marginBottom: 16,
-  },
-  score: {
-    fontSize: 18,
-    color: "#FFFFFF",
-  },
-  best: {
-    fontSize: 16,
-    color: "#888",
+    fontWeight: "900",
     marginBottom: 24,
   },
-  button: {
-    width: "100%",
+  score: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    marginBottom: 4,
+  },
+  buttonPrimary: {
+    marginTop: 24,
     paddingVertical: 12,
+    paddingHorizontal: 40,
+    backgroundColor: "#00E5FF",
+    borderRadius: 999,
+  },
+  buttonPrimaryText: {
+    color: "#000",
+    fontWeight: "800",
+    letterSpacing: 2,
+  },
+  buttonSecondary: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 40,
     borderRadius: 999,
     borderWidth: 2,
     borderColor: "#00E5FF",
-    alignItems: "center",
-    marginBottom: 12,
   },
-  menuButton: {
-    borderColor: "#FFFFFF",
-  },
-  buttonText: {
+  buttonSecondaryText: {
     color: "#00E5FF",
-    fontWeight: "bold",
-    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 1,
   },
 });

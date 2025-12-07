@@ -4,30 +4,45 @@ import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 
 type Props = {
+  bestScore: number;
   onStart: () => void;
-  onThemes: () => void;
-  onSettings: () => void;
+  onOpenThemes: () => void;
+  onOpenSettings: () => void;
 };
 
-export default function MainMenu({ onStart, onThemes, onSettings }: Props) {
+const MainMenu: React.FC<Props> = ({
+  bestScore,
+  onStart,
+  onOpenThemes,
+  onOpenSettings,
+}) => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>NEON CITY BLOCK</Text>
 
-      <TouchableOpacity style={styles.button} onPress={onStart}>
-        <Text style={styles.buttonText}>PLAY</Text>
-      </TouchableOpacity>
+      {bestScore > 0 && (
+        <Text style={styles.bestText}>BEST: {bestScore}</Text>
+      )}
 
-      <TouchableOpacity style={styles.button} onPress={onThemes}>
-        <Text style={styles.buttonText}>THEMES</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.button} onPress={onSettings}>
-        <Text style={styles.buttonText}>SETTINGS</Text>
-      </TouchableOpacity>
+      <View style={styles.buttons}>
+        <MenuButton label="PLAY" onPress={onStart} />
+        <MenuButton label="THEMES" onPress={onOpenThemes} />
+        <MenuButton label="SETTINGS" onPress={onOpenSettings} />
+      </View>
     </View>
   );
-}
+};
+
+const MenuButton: React.FC<{ label: string; onPress: () => void }> = ({
+  label,
+  onPress,
+}) => (
+  <TouchableOpacity style={styles.button} onPress={onPress}>
+    <Text style={styles.buttonText}>{label}</Text>
+  </TouchableOpacity>
+);
+
+export default MainMenu;
 
 const styles = StyleSheet.create({
   container: {
@@ -35,27 +50,35 @@ const styles = StyleSheet.create({
     backgroundColor: "#02020A",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
   },
   title: {
-    fontSize: 32,
-    color: "#00E5FF",
-    fontWeight: "bold",
+    fontSize: 30,
+    fontWeight: "900",
     letterSpacing: 3,
+    color: "#00E5FF",
     marginBottom: 40,
   },
+  bestText: {
+    color: "#00E5FF",
+    marginBottom: 12,
+    fontWeight: "600",
+  },
+  buttons: {
+    width: "100%",
+    gap: 16,
+  },
   button: {
-    width: "80%",
-    paddingVertical: 14,
     borderRadius: 999,
     borderWidth: 2,
     borderColor: "#00E5FF",
+    paddingVertical: 14,
     alignItems: "center",
-    marginBottom: 16,
   },
   buttonText: {
     color: "#00E5FF",
-    fontSize: 18,
-    fontWeight: "bold",
+    fontWeight: "700",
+    letterSpacing: 2,
+    fontSize: 16,
   },
 });

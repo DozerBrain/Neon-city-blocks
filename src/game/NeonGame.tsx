@@ -1,3 +1,5 @@
+// src/game/NeonGame.tsx
+
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
@@ -8,44 +10,41 @@ import {
   Animated,
   Easing,
 } from "react-native";
+import type { GameTheme } from "./ThemeManager";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
   Dimensions.get("window");
 
-// ----- PLAY AREA GEOMETRY (LOCAL, NOT SCREEN) -----
-const GAME_WIDTH = SCREEN_WIDTH * 0.9;       // inner neon frame width
-const GAME_HEIGHT = SCREEN_HEIGHT * 0.7;     // inner neon frame height
+// LOCAL PLAY AREA (inside neon frame)
+const GAME_WIDTH = SCREEN_WIDTH * 0.9;
+const GAME_HEIGHT = SCREEN_HEIGHT * 0.7;
 
 const BLOCK_SIZE = 60;
 const PLATFORM_HEIGHT = 10;
 
-// y-positions **inside** the neon frame
-const SWING_Y = 80;                          // where the swinging block moves
-const BASE_Y = GAME_HEIGHT - 60;             // where the platform sits
+// Y positions inside the frame
+const SWING_Y = 80;
+const BASE_Y = GAME_HEIGHT - 60;
 
-// horizontal limits for the center of the swinging block
+// swing horizontal limits (center of swinging block)
 const LEFT_LIMIT = BLOCK_SIZE / 2 + 8;
 const RIGHT_LIMIT = GAME_WIDTH - BLOCK_SIZE / 2 - 8;
 
 const DROP_DURATION = 450;
-
-// tilt logic
-const MAX_TILT_DEG = 14;          // visual max
-const TILT_TRIGGER_HEIGHT = 4;    // blocks before tilt starts to matter
-const TILT_TRIGGER_OFFSET = 0.4;  // how off-center to start tilting
+const MAX_TILT_DEG = 14;
 
 type TowerBlock = {
   id: number;
-  index: number; // 0 = sits on platform
-  x: number;     // center, in game-area coords (0..GAME_WIDTH)
+  index: number; // 0 = on platform
+  x: number; // center, 0..GAME_WIDTH
 };
 
 type Props = {
   onGameOver: (score: number) => void;
+  theme: GameTheme;
 };
 
-const NeonGame: React.FC<Props> = ({ onGameOver }) => {
-  // base block on the platform
+const NeonGame: React.FC<Props> = ({ onGameOver, theme }) => {
   const [blocks, setBlocks] = useState<TowerBlock[]>([
     { id: 0, index: 0, x: GAME_WIDTH / 2 },
   ]);
@@ -55,7 +54,7 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
   const [isGameOver, setIsGameOver] = useState(false);
   const [isNight, setIsNight] = useState(true);
 
-  // swing animation (center X of swinging block, in game coords)
+  // swing animation
   const swingX = useRef(new Animated.Value(GAME_WIDTH / 2)).current;
   const swingValue = useRef(GAME_WIDTH / 2);
   useEffect(() => {
@@ -65,23 +64,16 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     return () => swingX.removeListener(sub);
   }, [swingX]);
 
-  // falling block (center X and Y)
+  // falling block
   const fallingY = useRef(new Animated.Value(SWING_Y)).current;
   const fallingX = useRef(GAME_WIDTH / 2);
 
-  // tilt animation (-1 .. 1 logical → degrees for the whole frame)
-  const tiltUnit = useRef(new Animated.Value(0)).current;
+  // tilt of play area
+  const tiltUnit = useRef(new Animated.Value(0)).current; // -1..1
   const tiltDeg = tiltUnit.interpolate({
     inputRange: [-1, 1],
     outputRange: [`-${MAX_TILT_DEG}deg`, `${MAX_TILT_DEG}deg`],
   });
-  const tiltValue = useRef(0);
-  useEffect(() => {
-    const sub = tiltUnit.addListener(({ value }) => {
-      tiltValue.current = value;
-    });
-    return () => tiltUnit.removeListener(sub);
-  }, [tiltUnit]);
 
   const swingAnimRef = useRef<Animated.CompositeAnimation | null>(null);
 
@@ -97,10 +89,7 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
       });
 
     swingAnimRef.current = Animated.loop(
-      Animated.sequence([
-        makeStep(RIGHT_LIMIT),
-        makeStep(LEFT_LIMIT),
-      ])
+      Animated.sequence([makeStep(RIGHT_LIMIT), makeStep(LEFT_LIMIT)])
     );
     swingAnimRef.current.start();
   };
@@ -118,19 +107,17 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ----- INPUT -----
   const handleDrop = () => {
     if (isDropping || isGameOver) return;
 
     setIsDropping(true);
     stopSwing();
 
-    const currentX = swingValue.current; // center in game coords
+    const currentX = swingValue.current;
     fallingX.current = currentX;
 
     const targetIndex = blocks.length;
-    const targetY =
-      BASE_Y - BLOCK_SIZE / 2 - targetIndex * BLOCK_SIZE;
+    const targetY = BASE_Y - BLOCK_SIZE / 2 - targetIndex * BLOCK_SIZE;
 
     fallingY.setValue(SWING_Y);
 
@@ -146,24 +133,17 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     });
   };
 
-  // ----- GAME LOGIC -----
   const landBlock = (x: number, index: number) => {
     const top = blocks[blocks.length - 1];
     const dx = x - top.x;
     const missThreshold = BLOCK_SIZE * 0.7;
 
-    // miss → game over
     if (Math.abs(dx) > missThreshold) {
       triggerGameOver(score);
       return;
     }
 
-    const newBlock: TowerBlock = {
-      id: Date.now(),
-      index,
-      x,
-    };
-
+    const newBlock: TowerBlock = { id: Date.now(), index, x };
     const newBlocks = [...blocks, newBlock];
     setBlocks(newBlocks);
 
@@ -171,14 +151,14 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     setScore(newScore);
     if (newScore > best) setBest(newScore);
 
-    // tilt grows only when tower is tall AND placements are off-center
+    // small tilt based on off-center
     const heightFactor = Math.max(
       0,
-      Math.min(1, (newBlocks.length - TILT_TRIGGER_HEIGHT) / 10)
+      Math.min(1, (newBlocks.length - 4) / 10)
     );
     const offsetFactor = Math.min(1, Math.abs(dx) / missThreshold);
     const direction = dx === 0 ? 0 : dx > 0 ? 1 : -1;
-    const targetTilt = direction * heightFactor * offsetFactor; // -1..1
+    const targetTilt = direction * heightFactor * offsetFactor;
 
     Animated.spring(tiltUnit, {
       toValue: targetTilt,
@@ -186,8 +166,6 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
       tension: 40,
       useNativeDriver: true,
     }).start();
-
-    // if later we want tower collapse, we can add condition here
 
     setIsDropping(false);
     startSwing();
@@ -197,10 +175,8 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     setIsGameOver(true);
     stopSwing();
 
-    const direction = tiltValue.current >= 0 ? 1 : -1;
-
     Animated.timing(tiltUnit, {
-      toValue: direction,
+      toValue: tiltUnit.__getValue() >= 0 ? 1 : -1,
       duration: 400,
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
@@ -224,28 +200,14 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     startSwing();
   };
 
-  // ----- THEME -----
-  const theme = isNight
-    ? {
-        bg: "#02020A",
-        text: "#00E5FF",
-        playBg: "#05050F",
-        border: "#00E5FF",
-      }
-    : {
-        bg: "#F4F7FF",
-        text: "#007A8F",
-        playBg: "#FFFFFF",
-        border: "#00A5C8",
-      };
+  // theme colors
+  const bg = isNight ? theme.bgNight : theme.bgDay;
+  const playBg = isNight ? theme.playBgNight : theme.playBgDay;
+  const neon = theme.neon;
 
-  // ----- RENDER HELPERS -----
   const renderTower = () =>
     blocks.map((block) => {
-      const y =
-        BASE_Y -
-        BLOCK_SIZE / 2 -
-        block.index * BLOCK_SIZE;
+      const y = BASE_Y - BLOCK_SIZE / 2 - block.index * BLOCK_SIZE;
 
       return (
         <View
@@ -253,7 +215,7 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
           style={[
             styles.block,
             {
-              borderColor: theme.border,
+              borderColor: neon,
               width: BLOCK_SIZE,
               height: BLOCK_SIZE,
               transform: [
@@ -268,7 +230,7 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
 
   const renderSwingingOrFalling = () => {
     const baseStyle = {
-      borderColor: theme.border,
+      borderColor: neon,
       width: BLOCK_SIZE,
       height: BLOCK_SIZE,
     };
@@ -281,9 +243,7 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
             baseStyle,
             {
               transform: [
-                {
-                  translateX: fallingX.current - BLOCK_SIZE / 2,
-                },
+                { translateX: fallingX.current - BLOCK_SIZE / 2 },
                 { translateY: fallingY },
               ],
             },
@@ -300,32 +260,26 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
           {
             transform: [
               {
-                translateX: Animated.subtract(
-                  swingX,
-                  BLOCK_SIZE / 2
-                ),
+                translateX: Animated.subtract(swingX, BLOCK_SIZE / 2),
               },
               { translateY: SWING_Y },
             ],
           ]}
         />
       );
-    }
+    };
   };
 
-  // ----- RENDER -----
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: theme.text }]}>
-          NEON CITY BLOCK
-        </Text>
+        <Text style={[styles.title, { color: neon }]}>NEON CITY BLOCK</Text>
         <TouchableOpacity
-          style={[styles.modeChip, { borderColor: theme.text }]}
+          style={[styles.modeChip, { borderColor: neon }]}
           onPress={handleToggleMode}
         >
-          <Text style={[styles.modeText, { color: theme.text }]}>
+          <Text style={[styles.modeText, { color: neon }]}>
             {isNight ? "NIGHT" : "DAY"}
           </Text>
         </TouchableOpacity>
@@ -333,15 +287,15 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
 
       {/* Scores */}
       <View style={styles.scoreRow}>
-        <Text style={[styles.scoreText, { color: theme.text }]}>
+        <Text style={[styles.scoreText, { color: neon }]}>
           SCORE: <Text style={styles.scoreValue}>{score}</Text>
         </Text>
-        <Text style={[styles.scoreText, { color: theme.text }]}>
+        <Text style={[styles.scoreText, { color: neon }]}>
           BEST: <Text style={styles.scoreValue}>{best}</Text>
         </Text>
       </View>
 
-      {/* Play area */}
+      {/* Play Area */}
       <View style={styles.playWrapper}>
         <Animated.View
           style={[
@@ -349,42 +303,34 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
             {
               width: GAME_WIDTH,
               height: GAME_HEIGHT,
-              borderColor: theme.border,
-              backgroundColor: theme.playBg,
+              borderColor: neon,
+              backgroundColor: playBg,
               transform: [{ rotate: tiltDeg }],
             },
           ]}
         >
-          {/* Tower */}
           {renderTower()}
 
-          {/* Platform (almost corner-to-corner) */}
+          {/* Platform (corner-to-corner-ish) */}
           <View
             style={[
               styles.platform,
               {
-                borderColor: theme.border,
+                borderColor: neon,
                 width: GAME_WIDTH - 40,
-                transform: [
-                  { translateX: 20 },
-                  { translateY: BASE_Y },
-                ],
+                transform: [{ translateX: 20 }, { translateY: BASE_Y }],
               },
             ]}
           />
 
-          {/* Swinging / falling block */}
           {renderSwingingOrFalling()}
         </Animated.View>
       </View>
 
-      {/* Footer / buttons (raised up for banner ads) */}
+      {/* Footer (space for ads above system nav) */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[
-            styles.dropButton,
-            { backgroundColor: theme.text },
-          ]}
+          style={[styles.dropButton, { backgroundColor: neon }]}
           onPress={handleDrop}
           disabled={isDropping || isGameOver}
           activeOpacity={0.8}
@@ -394,18 +340,10 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
 
         {isGameOver && (
           <TouchableOpacity
-            style={[
-              styles.secondaryButton,
-              { borderColor: theme.text },
-            ]}
+            style={[styles.secondaryButton, { borderColor: neon }]}
             onPress={handleRestartLocal}
           >
-            <Text
-              style={[
-                styles.secondaryText,
-                { color: theme.text },
-              ]}
-            >
+            <Text style={[styles.secondaryText, { color: neon }]}>
               RESTART HERE
             </Text>
           </TouchableOpacity>
@@ -482,7 +420,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingTop: 8,
-    paddingBottom: 120, // << raised up for ad space
+    paddingBottom: 120,
     alignItems: "center",
   },
   dropButton: {

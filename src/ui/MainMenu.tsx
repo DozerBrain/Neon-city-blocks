@@ -12,7 +12,7 @@ type Props = {
 export default function MainMenu({ onStart, onThemes, onSettings }: Props) {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>NEON CITY BLOXX</Text>
+      <Text style={styles.title}>NEON CITY BLOCK</Text>
 
       <TouchableOpacity style={styles.button} onPress={onStart}>
         <Text style={styles.buttonText}>PLAY</Text>

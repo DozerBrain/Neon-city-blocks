@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Neon City Blocks",
+    "slug": "neon-city-blocks",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#02020A"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#02020A"
+      },
+      "package": "com.yourname.neoncityblocks"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

@@ -215,7 +215,7 @@ export default function useNeonGameController(
 
   // ------------ RENDER PARTS ------------
   const towerNode = (
-    <>
+    <React.Fragment>
       {blocks.map((block) => {
         const topY = getBlockTopY(PLATFORM_Y, block.level);
         return (
@@ -236,7 +236,7 @@ export default function useNeonGameController(
           />
         );
       })}
-    </>
+    </React.Fragment>
   );
 
   const swingNode = isDropping ? (
@@ -264,10 +264,7 @@ export default function useNeonGameController(
           height: BLOCK_SIZE,
           transform: [
             {
-              translateX: Animated.subtract(
-                swingX,
-                BLOCK_SIZE / 2
-              ),
+              translateX: Animated.subtract(swingX, BLOCK_SIZE / 2),
             },
             { translateY: SWING_Y },
           ],

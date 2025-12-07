@@ -1,14 +1,16 @@
-import React, { useState } from "react";
+import React from "react";
 import { View, StyleSheet } from "react-native";
 import AppRoot from "./src/AppRoot";
 
-export default function App() {
+const App: React.FC = () => {
   return (
     <View style={styles.container}>
       <AppRoot />
     </View>
   );
-}
+};
+
+export default App;
 
 const styles = StyleSheet.create({
   container: {

@@ -21,13 +21,13 @@ const PLATFORM_HEIGHT = 10;
 const PLAY_TOP = 80;
 const PLAY_BOTTOM = SCREEN_HEIGHT * 0.78;
 
-// how many blocks we want visible before we start pushing the tower down
+// how many blocks visible before we start pushing the tower down
 const MAX_VISIBLE_BLOCKS = 7;
 
 type TowerBlock = {
   id: number;
   index: number; // 0 = sitting on platform
-  x: number; // center position in screen coords
+  x: number; // center position
 };
 
 type Props = {
@@ -85,8 +85,8 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
   const playHeight = SCREEN_HEIGHT * 0.7;
   const centerX = SCREEN_WIDTH / 2;
 
-  // swing range based on play area width (almost edge-to-edge inside frame)
-  const SWING_RANGE = playWidth - BLOCK_SIZE * 1.6; // max left-right travel
+  // swing range based on play area width
+  const SWING_RANGE = playWidth - BLOCK_SIZE * 1.6;
 
   const startSwing = () => {
     swingX.setValue(0);
@@ -127,24 +127,22 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     setIsDropping(true);
     stopSwing();
 
-    // take EXACT position of swinging block on screen
+    // exact X where the block is when you tap
     const baseX = SCREEN_WIDTH / 2;
-    const offset = swingValue.current; // current animated swing offset
+    const offset = swingValue.current;
     const currentX = baseX + offset;
     fallingX.current = currentX;
 
     const targetIndex = blocks.length;
-
-    // tower scrolling: keep top around middle, push bottom down
-    const tallestIndex = targetIndex; // new block index
+    const tallestIndex = targetIndex;
     const yBase = PLAY_BOTTOM - PLATFORM_HEIGHT - BLOCK_SIZE / 2;
     const shift =
       Math.max(0, tallestIndex - MAX_VISIBLE_BLOCKS) * BLOCK_SIZE;
 
     const targetY = yBase - targetIndex * BLOCK_SIZE + shift;
 
-    // start fall from top
-    fallingY.setValue(PLAY_TOP + 40);
+    // start falling from top area
+    fallingY.setValue(PLAY_TOP + BLOCK_SIZE * 1.5);
 
     Animated.timing(fallingY, {
       toValue: targetY,
@@ -182,7 +180,7 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     setScore(newScore);
     if (newScore > best) setBest(newScore);
 
-    // tilt effect (only once tower is tall)
+    // tilt effect (only when tower is tall)
     const heightFactor = Math.max(0, Math.min(1, (newBlocks.length - 3) / 12));
     const offsetFactor = Math.min(1, Math.abs(dx) / missThreshold);
     const direction = dx === 0 ? 0 : dx > 0 ? 1 : -1;
@@ -195,7 +193,6 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
       useNativeDriver: true,
     }).start();
 
-    // NOTE: no crashy extra animation here – just keep playing
     setIsDropping(false);
     startSwing();
   };
@@ -203,7 +200,6 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
   const triggerGameOver = (finalScore: number) => {
     setIsGameOver(true);
     stopSwing();
-    // no extra tilt animation here to avoid crashes – just go to Game Over
     onGameOver(finalScore);
   };
 
@@ -218,12 +214,11 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     setIsDropping(false);
     tiltUnit.setValue(0);
     swingX.setValue(0);
-    fallingY.setValue(PLAY_TOP + 40);
+    fallingY.setValue(PLAY_TOP + BLOCK_SIZE * 1.5);
     startSwing();
   };
 
   // ------- RENDER HELPERS --------
-  // scrolling logic reused by tower & falling block
   const computeVerticalShift = (maxIndex: number) => {
     return Math.max(0, maxIndex - MAX_VISIBLE_BLOCKS) * BLOCK_SIZE;
   };
@@ -234,8 +229,7 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     const shift = computeVerticalShift(tallestIndex);
 
     return blocks.map((block) => {
-      const y =
-        yBase - block.index * BLOCK_SIZE + shift; // top stays around middle
+      const y = yBase - block.index * BLOCK_SIZE + shift;
       const translateX = block.x - BLOCK_SIZE / 2;
       const translateY = y - BLOCK_SIZE / 2;
 
@@ -269,6 +263,7 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
     const shift = computeVerticalShift(tallestIndex);
 
     if (isDropping) {
+      // dropping block – its Y is driven by fallingY, X is frozen at tap position
       return (
         <Animated.View
           style={[
@@ -285,8 +280,8 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
       );
     }
 
-    // swinging
-    const swingY = yBase - (tallestIndex + 1) * BLOCK_SIZE + shift; // one block above top
+    // *** FIXED: swing always near the TOP of the play area, not near platform ***
+    const swingY = PLAY_TOP + BLOCK_SIZE * 1.5; // constant top path
 
     return (
       <Animated.View
@@ -359,10 +354,9 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
             },
           ]}
         >
-          {/* Tower blocks */}
           {renderTower()}
 
-          {/* Platform – full width from corner to corner */}
+          {/* Platform – full width */}
           <View
             style={[
               styles.platform,
@@ -377,7 +371,6 @@ const NeonGame: React.FC<Props> = ({ onGameOver }) => {
             ]}
           />
 
-          {/* Swinging / falling block */}
           {renderSwingingOrFalling()}
         </Animated.View>
       </View>

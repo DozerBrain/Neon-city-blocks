@@ -9,115 +9,105 @@ import {
   Easing,
 } from "react-native";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
+  Dimensions.get("window");
 
 // ----- TUNING CONSTANTS -----
-const BLOCK_SIZE = 60;                 // size of each block (square)
-const PLATFORM_HEIGHT = 10;            // thickness of ground line
-const MAX_BLOCKS = 25;                 // hard cap, just in case
-const SWING_AMPLITUDE = SCREEN_WIDTH * 0.4; // how wide the top block swings
-const DROP_DURATION = 450;             // ms for block to fall
-const TILT_SENSITIVITY = 260;          // bigger = slower sway
-const TILT_LIMIT = 1.25;               // when |tilt| > this -> GAME OVER
-
-// Play area: from some top margin down to just above the button
+const BLOCK_SIZE = 60;
+const PLATFORM_HEIGHT = 10;
+const SWING_RANGE = SCREEN_WIDTH * 0.3; // total left-right range for swing
+const DROP_DURATION = 450;
+const TILT_LIMIT = 1.0; // logical tilt; visual is mapped to degrees
 const PLAY_TOP = 80;
 const PLAY_BOTTOM = SCREEN_HEIGHT * 0.78;
-const TOWER_CENTER_X = SCREEN_WIDTH / 2;
 
-type Block = {
+type TowerBlock = {
   id: number;
-  index: number;      // 0 = bottom on platform
-  x: number;          // absolute x (center)
+  index: number; // 0 = sitting on platform
+  x: number; // center position
 };
 
-interface Props {
+type Props = {
   onGameOver: (score: number) => void;
-}
+};
 
-export default function NeonGame({ onGameOver }: Props) {
-  const [blocks, setBlocks] = useState<Block[]>([]);
+const NeonGame: React.FC<Props> = ({ onGameOver }) => {
+  const [blocks, setBlocks] = useState<TowerBlock[]>([
+    { id: 0, index: 0, x: SCREEN_WIDTH / 2 },
+  ]);
   const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
   const [isDropping, setIsDropping] = useState(false);
-  const [isInputLocked, setIsInputLocked] = useState(false);
+  const [isGameOver, setIsGameOver] = useState(false);
+  const [isNight, setIsNight] = useState(true);
 
-  // swinging top block (x only)
-  const swingX = useRef(
-    new Animated.Value(TOWER_CENTER_X)
-  ).current;
-  const swingAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  // swing animation
+  const swingX = useRef(new Animated.Value(0)).current;
+  const swingValue = useRef(0);
+  useEffect(() => {
+    const sub = swingX.addListener(({ value }) => {
+      swingValue.current = value;
+    });
+    return () => swingX.removeListener(sub);
+  }, [swingX]);
 
   // falling block
   const fallingY = useRef(new Animated.Value(PLAY_TOP + 100)).current;
-  const fallingX = useRef<number | null>(null);
+  const fallingX = useRef(0);
 
-  // tower tilt (for sway)
-  const tiltValueRef = useRef(0); // logical tilt value
-  const tiltAnim = useRef(new Animated.Value(0)).current;
+  // tilt animation
+  const tiltUnit = useRef(new Animated.Value(0)).current; // -1..1 logical
+  const tiltDeg = tiltUnit.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ["-14deg", "14deg"],
+  });
 
-  // ----- HELPER: start swinging animation -----
-  const startSwinging = () => {
-    const left = TOWER_CENTER_X - SWING_AMPLITUDE / 2;
-    const right = TOWER_CENTER_X + SWING_AMPLITUDE / 2;
+  const swingAnimRef = useRef<Animated.CompositeAnimation | null>(null);
 
-    swingX.setValue(TOWER_CENTER_X);
+  const startSwing = () => {
+    swingX.setValue(0);
+    const left = -SWING_RANGE / 2;
+    const right = SWING_RANGE / 2;
+
+    const animTo = (to: number) =>
+      Animated.timing(swingX, {
+        toValue: to,
+        duration: 900,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      });
 
     swingAnimRef.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(swingX, {
-          toValue: right,
-          duration: 900,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: false,
-        }),
-        Animated.timing(swingX, {
-          toValue: left,
-          duration: 900,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: false,
-        }),
-      ])
+      Animated.sequence([animTo(right), animTo(left)])
     );
-
     swingAnimRef.current.start();
   };
 
-  // ----- HELPER: stop swinging -----
-  const stopSwinging = () => {
+  const stopSwing = () => {
     if (swingAnimRef.current) {
       swingAnimRef.current.stop();
       swingAnimRef.current = null;
     }
   };
 
-  // ----- INITIALIZE GAME -----
   useEffect(() => {
-    resetGame();
+    startSwing();
+    return () => stopSwing();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const resetGame = () => {
-    stopSwinging();
-    setBlocks([]);
-    setScore(0);
-    setIsDropping(false);
-    setIsInputLocked(false);
-    tiltValueRef.current = 0;
-    tiltAnim.setValue(0);
-    startSwinging();
-  };
-
-  // ----- DROP BUTTON HANDLER -----
   const handleDrop = () => {
-    if (isDropping || isInputLocked) return;
+    if (isDropping || isGameOver) return;
 
     setIsDropping(true);
-    setIsInputLocked(true);
-    stopSwinging();
+    stopSwing();
 
-    const currentX = (swingX as any)._value ?? TOWER_CENTER_X;
+    const baseX = SCREEN_WIDTH / 2;
+    const offset = swingValue.current;
+    const currentX = baseX + offset;
     fallingX.current = currentX;
 
-    const targetIndex = blocks.length; // 0 = platform
+    const targetIndex = blocks.length;
     const targetY =
       PLAY_BOTTOM - PLATFORM_HEIGHT - BLOCK_SIZE / 2 - targetIndex * BLOCK_SIZE;
 
@@ -126,239 +116,383 @@ export default function NeonGame({ onGameOver }: Props) {
     Animated.timing(fallingY, {
       toValue: targetY,
       duration: DROP_DURATION,
-      easing: Easing.in(Easing.quad),
-      useNativeDriver: false,
-    }).start(() => {
-      onBlockLanded(currentX, targetIndex);
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        landBlock(currentX, targetIndex);
+      }
     });
   };
 
-  // ----- WHEN BLOCK LANDS -----
-  const onBlockLanded = (x: number, index: number) => {
-    const newBlock: Block = {
+  const landBlock = (x: number, index: number) => {
+    const top = blocks[blocks.length - 1];
+    const dx = x - top.x;
+    const missThreshold = BLOCK_SIZE * 0.65;
+
+    // if too far from previous block center -> miss = game over
+    if (Math.abs(dx) > missThreshold) {
+      triggerGameOver(score);
+      return;
+    }
+
+    const newBlock: TowerBlock = {
       id: Date.now(),
       index,
       x,
     };
 
-    // update score & blocks
-    setBlocks((prev) => {
-      const updated = [...prev, newBlock].slice(0, MAX_BLOCKS);
-      setScore(updated.length);
-      return updated;
-    });
+    const newBlocks = [...blocks, newBlock];
+    setBlocks(newBlocks);
 
-    // update tower tilt based on misalignment
-    const offset = x - TOWER_CENTER_X; // >0 = to the right, <0 = to the left
-    const newTilt = tiltValueRef.current + offset / TILT_SENSITIVITY;
-    tiltValueRef.current = newTilt;
+    const newScore = score + 1;
+    setScore(newScore);
+    if (newScore > best) setBest(newScore);
 
-    Animated.spring(tiltAnim, {
-      toValue: newTilt,
-      friction: 6,
+    // tilt grows when tower is tall and placements are off-center
+    const heightFactor = Math.max(0, Math.min(1, (newBlocks.length - 3) / 12));
+    const offsetFactor = Math.min(1, Math.abs(dx) / missThreshold);
+    const direction = dx === 0 ? 0 : dx > 0 ? 1 : -1;
+    const targetTilt = direction * heightFactor * offsetFactor; // -1..1
+
+    Animated.spring(tiltUnit, {
+      toValue: targetTilt,
+      friction: 7,
       tension: 40,
-      useNativeDriver: false,
+      useNativeDriver: true,
     }).start();
 
-    // check for collapse
-    if (Math.abs(newTilt) > TILT_LIMIT) {
-      // small delay then game over
-      setTimeout(() => {
-        onGameOver(score + 1); // +1 for the block we just added
-        resetGame();
-      }, 550);
-      return;
+    // collapse if tall + big tilt
+    if (newBlocks.length > 7 && Math.abs(targetTilt) > TILT_LIMIT) {
+      triggerGameOver(newScore);
+    } else {
+      setIsDropping(false);
+      startSwing();
     }
-
-    // continue playing: start swinging next block
-    setIsDropping(false);
-    setIsInputLocked(false);
-    startSwinging();
   };
 
-  // ----- RENDER HELPERS -----
-  const renderPlatform = () => (
-    <View
-      style={[
-        styles.platform,
-        {
-          bottom: SCREEN_HEIGHT - PLAY_BOTTOM,
-        },
-      ]}
-    />
-  );
+  const triggerGameOver = (finalScore: number) => {
+    setIsGameOver(true);
+    stopSwing();
 
-  const renderStaticBlocks = () => {
-    return blocks.map((b) => {
+    Animated.timing(tiltUnit, {
+      toValue: tiltUnit.__getValue() > 0 ? 1 : -1,
+      duration: 400,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start(() => {
+      onGameOver(finalScore);
+    });
+  };
+
+  const handleToggleMode = () => {
+    setIsNight((prev) => !prev);
+  };
+
+  const handleRestartLocal = () => {
+    setBlocks([{ id: 0, index: 0, x: SCREEN_WIDTH / 2 }]);
+    setScore(0);
+    setIsGameOver(false);
+    setIsDropping(false);
+    tiltUnit.setValue(0);
+    swingX.setValue(0);
+    fallingY.setValue(PLAY_TOP + 100);
+    startSwing();
+  };
+
+  const theme = isNight
+    ? {
+        bg: "#02020A",
+        text: "#00E5FF",
+        playBg: "#05050F",
+        border: "#00E5FF",
+      }
+    : {
+        bg: "#F4F7FF",
+        text: "#007A8F",
+        playBg: "#FFFFFF",
+        border: "#00A5C8",
+      };
+
+  const centerX = SCREEN_WIDTH / 2;
+  const playHeight = SCREEN_HEIGHT * 0.7;
+  const playWidth = SCREEN_WIDTH * 0.9;
+
+  const renderTower = () =>
+    blocks.map((block) => {
       const y =
         PLAY_BOTTOM -
         PLATFORM_HEIGHT -
         BLOCK_SIZE / 2 -
-        b.index * BLOCK_SIZE;
+        block.index * BLOCK_SIZE;
+
+      const translateX = block.x - BLOCK_SIZE / 2;
+      const translateY = y - BLOCK_SIZE / 2;
 
       return (
         <View
-          key={b.id}
+          key={block.id}
           style={[
             styles.block,
             {
-              left: b.x - BLOCK_SIZE / 2,
-              top: y - BLOCK_SIZE / 2,
+              borderColor: theme.border,
+              width: BLOCK_SIZE,
+              height: BLOCK_SIZE,
+              transform: [{ translateX }, { translateY }],
             },
           ]}
         />
       );
     });
-  };
 
-  const renderSwingingBlock = () => {
-    if (isDropping) return null; // while dropping, we draw the falling one instead
+  const renderSwingingOrFalling = () => {
+    const size = BLOCK_SIZE;
+    const baseStyle = {
+      borderColor: theme.border,
+      width: size,
+      height: size,
+    };
 
-    return (
-      <Animated.View
-        style={[
-          styles.block,
-          {
-            top: PLAY_TOP + 100 - BLOCK_SIZE / 2,
-            left: Animated.subtract(swingX, BLOCK_SIZE / 2),
-          },
-        ]}
-      />
-    );
-  };
-
-  const renderFallingBlock = () => {
-    if (!isDropping || fallingX.current == null) return null;
-
-    return (
-      <Animated.View
-        style={[
-          styles.block,
-          {
-            left: fallingX.current - BLOCK_SIZE / 2,
-            top: Animated.subtract(fallingY, BLOCK_SIZE / 2),
-          },
-        ]}
-      />
-    );
-  };
-
-  // tilt -> deg for visual sway
-  const towerTiltDeg = tiltAnim.interpolate({
-    inputRange: [-2, 0, 2],
-    outputRange: ["-16deg", "0deg", "16deg"],
-  });
-
-  return (
-    <View style={styles.root}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Text style={styles.title}>NEON CITY BLOCK</Text>
-        <Text style={styles.scoreText}>SCORE: {score}</Text>
-      </View>
-
-      {/* PLAY AREA */}
-      <View style={styles.playArea}>
+    if (isDropping) {
+      return (
         <Animated.View
           style={[
-            styles.towerContainer,
+            styles.block,
+            baseStyle,
             {
-              transform: [{ rotate: towerTiltDeg }],
+              transform: [
+                {
+                  translateX:
+                    fallingX.current - size / 2,
+                },
+                {
+                  translateY: fallingY,
+                },
+              ],
+            },
+          ]}
+        />
+      );
+    }
+
+    return (
+      <Animated.View
+        style={[
+          styles.block,
+          baseStyle,
+          {
+            transform: [
+              {
+                translateX: swingX.interpolate({
+                  inputRange: [-SWING_RANGE / 2, SWING_RANGE / 2],
+                  outputRange: [
+                    centerX - SWING_RANGE / 2 - size / 2,
+                    centerX + SWING_RANGE / 2 - size / 2,
+                  ],
+                }),
+              },
+              { translateY: PLAY_TOP + 60 },
+            ],
+          },
+        ]}
+      />
+    );
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      {/* Header */}
+      <View style={styles.headerRow}>
+        <Text style={[styles.title, { color: theme.text }]}>
+          NEON CITY BLOCK
+        </Text>
+        <TouchableOpacity
+          style={[styles.modeChip, { borderColor: theme.text }]}
+          onPress={handleToggleMode}
+        >
+          <Text style={[styles.modeText, { color: theme.text }]}>
+            {isNight ? "NIGHT" : "DAY"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Scores */}
+      <View style={styles.scoreRow}>
+        <Text style={[styles.scoreText, { color: theme.text }]}>
+          SCORE: <Text style={styles.scoreValue}>{score}</Text>
+        </Text>
+        <Text style={[styles.scoreText, { color: theme.text }]}>
+          BEST: <Text style={styles.scoreValue}>{best}</Text>
+        </Text>
+      </View>
+
+      {/* Play area */}
+      <View style={styles.playWrapper}>
+        <Animated.View
+          style={[
+            styles.playArea,
+            {
+              width: playWidth,
+              height: playHeight,
+              borderColor: theme.border,
+              backgroundColor: theme.playBg,
+              transform: [{ rotate: tiltDeg }],
             },
           ]}
         >
-          {renderPlatform()}
-          {renderStaticBlocks()}
-          {renderSwingingBlock()}
-          {renderFallingBlock()}
+          {/* Tower */}
+          {renderTower()}
+
+          {/* Platform */}
+          <View
+            style={[
+              styles.platform,
+              {
+                borderColor: theme.border,
+                width: playWidth * 0.8,
+                transform: [
+                  {
+                    translateX:
+                      centerX - (playWidth * 0.8) / 2,
+                  },
+                  {
+                    translateY:
+                      PLAY_BOTTOM - PLATFORM_HEIGHT * 2,
+                  },
+                ],
+              },
+            ]}
+          />
+
+          {/* Swinging / falling block */}
+          {renderSwingingOrFalling()}
         </Animated.View>
       </View>
 
-      {/* DROP BUTTON */}
+      {/* Buttons */}
       <View style={styles.footer}>
         <TouchableOpacity
           style={[
             styles.dropButton,
-            isInputLocked && { opacity: 0.5 },
+            { backgroundColor: theme.text },
           ]}
           onPress={handleDrop}
+          disabled={isDropping || isGameOver}
           activeOpacity={0.8}
         >
           <Text style={styles.dropText}>DROP</Text>
         </TouchableOpacity>
+
+        {isGameOver && (
+          <TouchableOpacity
+            style={[
+              styles.secondaryButton,
+              { borderColor: theme.text },
+            ]}
+            onPress={handleRestartLocal}
+          >
+            <Text style={[styles.secondaryText, { color: theme.text }]}>
+              RESTART HERE
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
-}
+};
+
+export default NeonGame;
 
 const styles = StyleSheet.create({
-  root: {
+  container: {
     flex: 1,
-    backgroundColor: "#050710",
+    paddingTop: 16,
   },
-  header: {
-    paddingTop: 40,
-    paddingHorizontal: 24,
-    paddingBottom: 12,
+  headerRow: {
     flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
     justifyContent: "space-between",
-    alignItems: "flex-end",
   },
   title: {
-    color: "#00eaff",
     fontSize: 22,
     fontWeight: "900",
     letterSpacing: 2,
   },
-  scoreText: {
-    color: "#ffffff",
-    fontSize: 16,
+  modeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 2,
+  },
+  modeText: {
+    fontSize: 12,
     fontWeight: "700",
+    letterSpacing: 1,
+  },
+  scoreRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    marginTop: 8,
+  },
+  scoreText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  scoreValue: {
+    fontWeight: "800",
+  },
+  playWrapper: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingTop: 10,
   },
   playArea: {
     flex: 1,
-    paddingHorizontal: 12,
-  },
-  towerContainer: {
-    flex: 1,
-    borderRadius: 18,
+    borderRadius: 24,
     borderWidth: 2,
-    borderColor: "#101320",
     overflow: "hidden",
-  },
-  platform: {
-    position: "absolute",
-    left: 10,
-    right: 10,
-    height: PLATFORM_HEIGHT,
-    borderWidth: 2,
-    borderColor: "#00eaff",
-    borderRadius: 4,
+    position: "relative",
   },
   block: {
     position: "absolute",
-    width: BLOCK_SIZE,
-    height: BLOCK_SIZE,
     borderWidth: 3,
-    borderColor: "#00eaff",
-    borderRadius: 2,
+    borderRadius: 4,
     backgroundColor: "transparent",
   },
+  platform: {
+    position: "absolute",
+    height: 6,
+    borderWidth: 3,
+    borderRadius: 999,
+  },
   footer: {
-    paddingBottom: 26,
-    paddingTop: 12,
+    paddingBottom: 24,
+    paddingTop: 8,
     alignItems: "center",
-    justifyContent: "center",
   },
   dropButton: {
     paddingHorizontal: 40,
     paddingVertical: 12,
     borderRadius: 999,
-    backgroundColor: "#00eaff",
   },
   dropText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "800",
+    letterSpacing: 2,
+    color: "#000",
+  },
+  secondaryButton: {
+    marginTop: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 2,
+  },
+  secondaryText: {
+    fontSize: 13,
+    fontWeight: "700",
     letterSpacing: 1,
   },
 });

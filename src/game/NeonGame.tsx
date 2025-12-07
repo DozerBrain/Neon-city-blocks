@@ -253,7 +253,7 @@ export default function NeonGame({ onGameOver }: Props) {
     <View style={styles.root}>
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.title}>NEON CITY BLOXX</Text>
+        <Text style={styles.title}>NEON CITY BLOCK</Text>
         <Text style={styles.scoreText}>SCORE: {score}</Text>
       </View>
 

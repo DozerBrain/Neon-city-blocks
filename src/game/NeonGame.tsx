@@ -25,12 +25,8 @@ const SWING_TOP = 60;
 // Distance from play bottom to platform top
 const PLATFORM_BOTTOM_MARGIN = 24;
 
-// Helpers for vertical positions (inside play area)
-const getPlatformTop = () =>
-  PLAY_HEIGHT - PLATFORM_HEIGHT - PLATFORM_BOTTOM_MARGIN;
-
-const getBlockTop = (index: number) =>
-  getPlatformTop() - BLOCK_SIZE * (index + 1);
+// The highest we allow the tower top to go before we push everything down
+const TOP_LIMIT = 80;
 
 type TowerBlock = {
   id: number;
@@ -52,6 +48,16 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
   const [isDropping, setIsDropping] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [isNight, setIsNight] = useState(true);
+
+  // vertical offset for the whole tower + platform
+  // when tower gets high, we increase offsetY so bottom goes down
+  const [offsetY, setOffsetY] = useState(0);
+
+  const basePlatformTop =
+    PLAY_HEIGHT - PLATFORM_HEIGHT - PLATFORM_BOTTOM_MARGIN;
+
+  const blockTop = (index: number, off: number) =>
+    basePlatformTop + off - BLOCK_SIZE * (index + 1);
 
   // theme
   const theme = isNight
@@ -129,10 +135,9 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
     fallingXRef.current = currentCentreX;
 
     const nextIndex = blocks.length;
-    const targetTop = getBlockTop(nextIndex);
+    const targetTop = blockTop(nextIndex, offsetY); // where it should land
 
     const startTop = SWING_TOP;
-
     fallingY.setValue(0);
 
     Animated.timing(fallingY, {
@@ -150,7 +155,9 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
 
   const landBlock = (x: number, prevX: number, index: number) => {
     const dx = x - prevX;
-    const missThreshold = BLOCK_SIZE * 0.7; // how far you can be off centre
+
+    // MUCH more generous: as long as there is some overlap, it counts
+    const missThreshold = BLOCK_SIZE * 1.1;
 
     // Miss → game over (no crash, just go out)
     if (Math.abs(dx) > missThreshold) {
@@ -160,7 +167,20 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
 
     const newBlock: TowerBlock = { id: Date.now(), index, x };
     const newBlocks = [...blocks, newBlock];
+
+    // ---- vertical scroll logic ----
+    // compute where the top of this new block would be
+    let newOffsetY = offsetY;
+    const newTop = blockTop(index, newOffsetY);
+
+    // if top is above TOP_LIMIT, push whole tower + platform down
+    if (newTop < TOP_LIMIT) {
+      const diff = TOP_LIMIT - newTop; // how much we need to move down
+      newOffsetY += diff;
+    }
+
     setBlocks(newBlocks);
+    setOffsetY(newOffsetY);
 
     const newScore = score + 1;
     setScore(newScore);
@@ -174,7 +194,7 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
 
   const triggerGameOver = (finalScore: number) => {
     setIsGameOver(true);
-    onGameOver(finalScore); // this calls GameOver screen from AppRoot
+    onGameOver(finalScore);
   };
 
   const handleRestartLocal = () => {
@@ -183,6 +203,7 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
     setIsGameOver(false);
     setIsDropping(false);
     fallingY.setValue(0);
+    setOffsetY(0);
     startSwing();
   };
 
@@ -200,7 +221,7 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
             borderColor: theme.border,
             width: BLOCK_SIZE,
             height: BLOCK_SIZE,
-            top: getBlockTop(block.index),
+            top: blockTop(block.index, offsetY),
             left: block.x - BLOCK_SIZE / 2,
           },
         ]}
@@ -215,7 +236,7 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
     };
 
     if (isDropping) {
-      // falling from SWING_TOP
+      // falling from fixed SWING_TOP
       return (
         <Animated.View
           style={[
@@ -295,7 +316,7 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
                 borderColor: theme.border,
                 left: SWING_PADDING,
                 right: SWING_PADDING,
-                top: getPlatformTop(),
+                top: basePlatformTop + offsetY,
                 height: PLATFORM_HEIGHT,
               },
             ]}

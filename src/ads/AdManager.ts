@@ -1,11 +1,11 @@
-// src/ads/AdManager.ts
-// Placeholder for future AdMob / rewarded ads integration
+export type AdPosition = "top" | "bottom";
 
-export type RewardType = "revive" | "unlock_theme";
+export function showBannerAd(_position: AdPosition = "bottom") {
+  // Placeholder – integrate AdMob or another SDK later.
+  // Keeping this file so imports won’t break when we add ads.
+  console.log("showBannerAd called");
+}
 
-export async function showRewardedAd(kind: RewardType): Promise<boolean> {
-  // In the future: show real ad here and resolve(true) if user watched full video.
-  console.log("[AdManager] showRewardedAd:", kind);
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return true; // pretend ad was watched
+export function hideBannerAd() {
+  console.log("hideBannerAd called");
 }

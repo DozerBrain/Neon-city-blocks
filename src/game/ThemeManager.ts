@@ -1,59 +1,41 @@
 // src/game/ThemeManager.ts
-// Manages visual themes (City, Desert, Beach, Jungle, etc.)
 
-export type ThemeId = "city" | "desert" | "beach" | "jungle";
+export type ThemeId = "neon-blue" | "neon-pink";
 
-export type Theme = {
+export type GameTheme = {
   id: ThemeId;
   name: string;
+  neon: string;      // main neon color
   bgNight: string;
+  playBgNight: string;
   bgDay: string;
-  neon: string;
-  groundFill: string;
+  playBgDay: string;
 };
 
-export const THEMES: Theme[] = [
+export const THEMES: GameTheme[] = [
   {
-    id: "city",
-    name: "Neon City",
-    bgNight: "#02020A",
-    bgDay: "#1A1B2F",
+    id: "neon-blue",
+    name: "Neon Blue",
     neon: "#00E5FF",
-    groundFill: "#041821",
+    bgNight: "#02020A",
+    playBgNight: "#05050F",
+    bgDay: "#F4F7FF",
+    playBgDay: "#FFFFFF",
   },
   {
-    id: "desert",
-    name: "Neon Desert",
-    bgNight: "#1B0B19",
-    bgDay: "#3C2133",
-    neon: "#FF9F1C",
-    groundFill: "#663F2F",
-  },
-  {
-    id: "beach",
-    name: "Neon Beach",
-    bgNight: "#031926",
-    bgDay: "#145374",
-    neon: "#00FFF5",
-    groundFill: "#F4D35E",
-  },
-  {
-    id: "jungle",
-    name: "Neon Jungle",
-    bgNight: "#01110A",
-    bgDay: "#063F2E",
-    neon: "#35FF69",
-    groundFill: "#024731",
+    id: "neon-pink",
+    name: "Neon Pink",
+    neon: "#FF2DCB",
+    bgNight: "#160012",
+    playBgNight: "#23001D",
+    bgDay: "#FFF4FB",
+    playBgDay: "#FFFFFF",
   },
 ];
 
-export function getTheme(id: ThemeId): Theme {
+export const DEFAULT_THEME_ID: ThemeId = "neon-blue";
+
+export function getThemeById(id: ThemeId): GameTheme {
   const found = THEMES.find((t) => t.id === id);
   return found ?? THEMES[0];
-}
-
-export function getNextTheme(current: ThemeId): ThemeId {
-  const index = THEMES.findIndex((t) => t.id === current);
-  if (index === -1) return THEMES[0].id;
-  return THEMES[(index + 1) % THEMES.length].id;
 }

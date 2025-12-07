@@ -1,15 +1,26 @@
+// src/AppRoot.tsx
 import React, { useState } from "react";
 import { SafeAreaView, StatusBar, StyleSheet } from "react-native";
 import MainMenu from "./ui/MainMenu";
 import GameOver from "./ui/GameOver";
+import ThemesMenu from "./ui/ThemesMenu";
+import Settings from "./ui/Settings";
 import NeonGame from "./game/NeonGame";
+import {
+  DEFAULT_THEME_ID,
+  getThemeById,
+  type ThemeId,
+} from "./game/ThemeManager";
 
-type Screen = "menu" | "game" | "gameover";
+type Screen = "menu" | "game" | "gameover" | "themes" | "settings";
 
 const AppRoot: React.FC = () => {
   const [screen, setScreen] = useState<Screen>("menu");
   const [lastScore, setLastScore] = useState(0);
   const [bestScore, setBestScore] = useState(0);
+
+  const [themeId, setThemeId] = useState<ThemeId>(DEFAULT_THEME_ID);
+  const currentTheme = getThemeById(themeId);
 
   const handleStart = () => {
     setScreen("game");
@@ -29,13 +40,30 @@ const AppRoot: React.FC = () => {
     setScreen("menu");
   };
 
+  const openThemes = () => {
+    setScreen("themes");
+  };
+
+  const openSettings = () => {
+    setScreen("settings");
+  };
+
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="light-content" />
       {screen === "menu" && (
-        <MainMenu bestScore={bestScore} onStart={handleStart} />
+        <MainMenu
+          bestScore={bestScore}
+          onStart={handleStart}
+          onOpenThemes={openThemes}
+          onOpenSettings={openSettings}
+        />
       )}
-      {screen === "game" && <NeonGame onGameOver={handleGameOver} />}
+
+      {screen === "game" && (
+        <NeonGame onGameOver={handleGameOver} theme={currentTheme} />
+      )}
+
       {screen === "gameover" && (
         <GameOver
           score={lastScore}
@@ -44,6 +72,16 @@ const AppRoot: React.FC = () => {
           onMenu={handleBackToMenu}
         />
       )}
+
+      {screen === "themes" && (
+        <ThemesMenu
+          current={themeId}
+          onSelect={(id) => setThemeId(id)}
+          onBack={handleBackToMenu}
+        />
+      )}
+
+      {screen === "settings" && <Settings onBack={handleBackToMenu} />}
     </SafeAreaView>
   );
 };

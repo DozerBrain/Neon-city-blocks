@@ -1,4 +1,4 @@
-// src/game/useNeonGameController.ts
+// src/game/useNeonGameController.tsx
 
 import React, { useEffect, useRef, useState } from "react";
 import { Dimensions, Animated, Easing, View } from "react-native";

@@ -13,19 +13,28 @@ import {
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
   Dimensions.get("window");
 
-// ---- TUNING CONSTANTS ----
-const BLOCK_SIZE = 60;
-const PLATFORM_HEIGHT = 8;
+// Playfield sizes
 const PLAY_WIDTH = SCREEN_WIDTH * 0.9;
 const PLAY_HEIGHT = SCREEN_HEIGHT * 0.7;
 
-const PLATFORM_BOTTOM = 24; // distance from play-area bottom
-const MAX_VISIBLE_BLOCKS = 9; // after this, bottom starts moving down
-const DROP_DURATION = 450;
+const BLOCK_SIZE = 60;
+const PLATFORM_HEIGHT = 8;
+
+// Top of swinging block (inside play area)
+const SWING_TOP = 60;
+// Distance from play bottom to platform top
+const PLATFORM_BOTTOM_MARGIN = 24;
+
+// Helpers for vertical positions (inside play area)
+const getPlatformTop = () =>
+  PLAY_HEIGHT - PLATFORM_HEIGHT - PLATFORM_BOTTOM_MARGIN;
+
+const getBlockTop = (index: number) =>
+  getPlatformTop() - BLOCK_SIZE * (index + 1);
 
 type TowerBlock = {
   id: number;
-  index: number; // 0 = sitting on platform
+  index: number; // 0 = base block on platform
   x: number; // center X inside play area (0..PLAY_WIDTH)
 };
 
@@ -34,7 +43,7 @@ type NeonGameProps = {
 };
 
 const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
-  // one base block on platform in the centre
+  // one base block in the centre on the platform
   const [blocks, setBlocks] = useState<TowerBlock[]>([
     { id: 0, index: 0, x: PLAY_WIDTH / 2 },
   ]);
@@ -43,7 +52,6 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
   const [isDropping, setIsDropping] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [isNight, setIsNight] = useState(true);
-  const [scrollOffset, setScrollOffset] = useState(0); // pushes bottom down when tower tall
 
   // theme
   const theme = isNight
@@ -60,68 +68,55 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
         border: "#00A5C8",
       };
 
-  // ---- SWINGING BLOCK (TOP) ----
-  const LEFT_BOUND = BLOCK_SIZE / 2 + 16;
-  const RIGHT_BOUND = PLAY_WIDTH - BLOCK_SIZE / 2 - 16;
+  // --- Swinging block (horizontal) ---
+  const swingX = useRef(new Animated.Value(0)).current; // 0..maxSwing
+  const swingValueRef = useRef(0); // numeric value for logic
 
-  const swingPhase = useRef(new Animated.Value(0)).current; // 0..1
-  const swingAnimRef = useRef<Animated.CompositeAnimation | null>(null);
-  const currentSwingX = useRef((LEFT_BOUND + RIGHT_BOUND) / 2); // actual centre X
+  // max pixels we move horizontally (inside padding)
+  const SWING_PADDING = 16;
+  const maxSwing = PLAY_WIDTH - BLOCK_SIZE - SWING_PADDING * 2;
 
   useEffect(() => {
-    const sub = swingPhase.addListener(({ value }) => {
-      const x = LEFT_BOUND + value * (RIGHT_BOUND - LEFT_BOUND);
-      currentSwingX.current = x;
+    const sub = swingX.addListener(({ value }) => {
+      swingValueRef.current = value;
     });
 
     startSwing();
 
     return () => {
-      swingPhase.removeListener(sub);
-      stopSwing();
+      swingX.removeListener(sub);
+      swingX.stopAnimation();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startSwing = () => {
-    swingPhase.setValue(0);
-    const anim = Animated.loop(
+    swingX.setValue(0);
+    Animated.loop(
       Animated.sequence([
-        Animated.timing(swingPhase, {
-          toValue: 1,
+        Animated.timing(swingX, {
+          toValue: maxSwing,
           duration: 900,
           easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
+          useNativeDriver: false, // animating "left"
         }),
-        Animated.timing(swingPhase, {
+        Animated.timing(swingX, {
           toValue: 0,
           duration: 900,
           easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ])
-    );
-    swingAnimRef.current = anim;
-    anim.start();
+    ).start();
   };
 
   const stopSwing = () => {
-    if (swingAnimRef.current) {
-      swingAnimRef.current.stop();
-      swingAnimRef.current = null;
-    }
+    swingX.stopAnimation();
   };
 
-  // ---- FALLING BLOCK ----
-  const fallBottom = useRef(new Animated.Value(PLAY_HEIGHT + 100)).current;
-  const fallingX = useRef(currentSwingX.current); // centre X of the falling block
-
-  // ---- TILT (WHOLE PLAY AREA) ----
-  const tiltUnit = useRef(new Animated.Value(0)).current; // -1..1
-  const tiltDeg = tiltUnit.interpolate({
-    inputRange: [-1, 1],
-    outputRange: ["-14deg", "14deg"],
-  });
+  // --- Falling block (vertical) ---
+  const fallingY = useRef(new Animated.Value(0)).current; // translateY
+  const fallingXRef = useRef(PLAY_WIDTH / 2); // centre X while falling
 
   const handleDrop = () => {
     if (isDropping || isGameOver) return;
@@ -129,161 +124,107 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
     setIsDropping(true);
     stopSwing();
 
-    const baseBlock = blocks[blocks.length - 1];
+    const currentCentreX =
+      SWING_PADDING + swingValueRef.current + BLOCK_SIZE / 2;
+    fallingXRef.current = currentCentreX;
+
     const nextIndex = blocks.length;
+    const targetTop = getBlockTop(nextIndex);
 
-    // X position from swing
-    const x = currentSwingX.current;
-    fallingX.current = x;
+    const startTop = SWING_TOP;
 
-    // where this block should land (bottom from play-area bottom)
-    const targetBottom =
-      PLATFORM_BOTTOM +
-      PLATFORM_HEIGHT +
-      nextIndex * BLOCK_SIZE -
-      scrollOffset;
+    fallingY.setValue(0);
 
-    fallBottom.setValue(PLAY_HEIGHT + 80);
-
-    Animated.timing(fallBottom, {
-      toValue: targetBottom,
-      duration: DROP_DURATION,
+    Animated.timing(fallingY, {
+      toValue: targetTop - startTop,
+      duration: 450,
       easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
+      useNativeDriver: false, // animating translateY
     }).start(({ finished }) => {
       if (!finished) return;
-      landBlock(x, baseBlock.x, nextIndex);
+
+      const prev = blocks[blocks.length - 1];
+      landBlock(currentCentreX, prev.x, nextIndex);
     });
   };
 
   const landBlock = (x: number, prevX: number, index: number) => {
     const dx = x - prevX;
-    const missThreshold = BLOCK_SIZE * 0.7;
+    const missThreshold = BLOCK_SIZE * 0.7; // how far you can be off centre
 
-    // MISS → game over
+    // Miss → game over (no crash, just go out)
     if (Math.abs(dx) > missThreshold) {
       triggerGameOver(score);
       return;
     }
 
-    // add new block
-    const newBlock: TowerBlock = {
-      id: Date.now(),
-      index,
-      x,
-    };
+    const newBlock: TowerBlock = { id: Date.now(), index, x };
     const newBlocks = [...blocks, newBlock];
     setBlocks(newBlocks);
 
-    // score
     const newScore = score + 1;
     setScore(newScore);
     if (newScore > best) setBest(newScore);
 
-    // scrolling: once tower higher than MAX_VISIBLE_BLOCKS, push bottom down
-    const extraBlocks = Math.max(0, newBlocks.length - MAX_VISIBLE_BLOCKS);
-    const newScroll = extraBlocks * BLOCK_SIZE;
-    setScrollOffset(newScroll);
-
-    // tilt: more tilt for taller tower + off-centre landings
-    const heightFactor = Math.max(
-      0,
-      Math.min(1, (newBlocks.length - 2) / 10)
-    );
-    const offsetFactor = Math.min(1, Math.abs(dx) / missThreshold);
-    const direction = dx === 0 ? 0 : dx > 0 ? 1 : -1;
-    const targetTilt = direction * heightFactor * offsetFactor; // -1..1
-
-    Animated.spring(tiltUnit, {
-      toValue: targetTilt,
-      friction: 7,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
-
     // ready for next swing
     setIsDropping(false);
+    fallingY.setValue(0);
     startSwing();
   };
 
   const triggerGameOver = (finalScore: number) => {
     setIsGameOver(true);
-
-    // small tilt "fall" animation
-    Animated.timing(tiltUnit, {
-      toValue: tiltUnit.__getValue() >= 0 ? 1 : -1,
-      duration: 350,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start(() => {
-      onGameOver(finalScore);
-    });
+    onGameOver(finalScore); // this calls GameOver screen from AppRoot
   };
-
-  const handleToggleMode = () => setIsNight((prev) => !prev);
 
   const handleRestartLocal = () => {
     setBlocks([{ id: 0, index: 0, x: PLAY_WIDTH / 2 }]);
     setScore(0);
     setIsGameOver(false);
     setIsDropping(false);
-    setScrollOffset(0);
-    tiltUnit.setValue(0);
-    fallBottom.setValue(PLAY_HEIGHT + 100);
+    fallingY.setValue(0);
     startSwing();
   };
+
+  const handleToggleMode = () => setIsNight((prev) => !prev);
 
   // ---- RENDER HELPERS ----
 
   const renderTower = () =>
-    blocks.map((block) => {
-      const bottom =
-        PLATFORM_BOTTOM +
-        PLATFORM_HEIGHT +
-        block.index * BLOCK_SIZE -
-        scrollOffset;
-
-      return (
-        <View
-          key={block.id}
-          style={[
-            styles.block,
-            {
-              borderColor: theme.border,
-              width: BLOCK_SIZE,
-              height: BLOCK_SIZE,
-              bottom,
-              left: block.x - BLOCK_SIZE / 2,
-            },
-          ]}
-        />
-      );
-    });
+    blocks.map((block) => (
+      <View
+        key={block.id}
+        style={[
+          styles.block,
+          {
+            borderColor: theme.border,
+            width: BLOCK_SIZE,
+            height: BLOCK_SIZE,
+            top: getBlockTop(block.index),
+            left: block.x - BLOCK_SIZE / 2,
+          },
+        ]}
+      />
+    ));
 
   const renderSwingingOrFalling = () => {
-    const common = {
+    const baseStyle = {
       borderColor: theme.border,
       width: BLOCK_SIZE,
       height: BLOCK_SIZE,
     };
 
     if (isDropping) {
-      // falling
+      // falling from SWING_TOP
       return (
         <Animated.View
           style={[
             styles.block,
-            common,
+            baseStyle,
             {
-              left: fallingX.current - BLOCK_SIZE / 2,
-              transform: [
-                {
-                  translateY: Animated.subtract(
-                    fallBottom,
-                    PLAY_HEIGHT
-                  ),
-                },
-              ],
+              top: SWING_TOP,
+              left: fallingXRef.current - BLOCK_SIZE / 2,
+              transform: [{ translateY: fallingY }],
             },
           ]}
         />
@@ -291,24 +232,15 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
     }
 
     // swinging
-    const animatedLeft = swingPhase.interpolate({
-      inputRange: [0, 1],
-      outputRange: [
-        LEFT_BOUND - BLOCK_SIZE / 2,
-        RIGHT_BOUND - BLOCK_SIZE / 2,
-      ],
-    });
-
     return (
       <Animated.View
         style={[
           styles.block,
-          common,
+          baseStyle,
           {
-            bottom:
-              PLAY_HEIGHT -
-              (PLATFORM_BOTTOM + PLATFORM_HEIGHT + BLOCK_SIZE * 3),
-            left: animatedLeft,
+            top: SWING_TOP,
+            left: SWING_PADDING,
+            transform: [{ translateX: swingX }],
           },
         ]}
       />
@@ -344,7 +276,7 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
 
       {/* Play area */}
       <View style={styles.playWrapper}>
-        <Animated.View
+        <View
           style={[
             styles.playArea,
             {
@@ -352,28 +284,27 @@ const NeonGame: React.FC<NeonGameProps> = ({ onGameOver }) => {
               height: PLAY_HEIGHT,
               borderColor: theme.border,
               backgroundColor: theme.playBg,
-              transform: [{ rotate: tiltDeg }],
             },
           ]}
         >
-          {/* platform from corner to corner */}
+          {/* Platform from corner to corner (inside padding) */}
           <View
             style={[
               styles.platform,
               {
                 borderColor: theme.border,
-                left: 16,
-                right: 16,
-                bottom: PLATFORM_BOTTOM - scrollOffset,
+                left: SWING_PADDING,
+                right: SWING_PADDING,
+                top: getPlatformTop(),
                 height: PLATFORM_HEIGHT,
               },
             ]}
           />
 
-          {/* tower & active block */}
+          {/* Tower blocks & active block */}
           {renderTower()}
           {renderSwingingOrFalling()}
-        </Animated.View>
+        </View>
       </View>
 
       {/* Bottom buttons */}

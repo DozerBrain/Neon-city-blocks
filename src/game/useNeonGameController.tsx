@@ -102,7 +102,7 @@ export default function useNeonGameController(
         toValue: to,
         duration: SWING_DURATION,
         easing: Easing.inOut(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: false,
       });
 
     swingAnimRef.current = Animated.loop(

@@ -1,26 +1,58 @@
 import React, { useState } from "react";
+import { SafeAreaView, StatusBar, StyleSheet } from "react-native";
 import MainMenu from "./ui/MainMenu";
 import GameOver from "./ui/GameOver";
 import NeonGame from "./game/NeonGame";
 
-export type Screen = "menu" | "game" | "gameover";
+type Screen = "menu" | "game" | "gameover";
 
-export default function AppRoot() {
+const AppRoot: React.FC = () => {
   const [screen, setScreen] = useState<Screen>("menu");
   const [lastScore, setLastScore] = useState(0);
+  const [bestScore, setBestScore] = useState(0);
 
-  const startGame = () => setScreen("game");
+  const handleStart = () => {
+    setScreen("game");
+  };
 
-  const endGame = (score: number) => {
+  const handleGameOver = (score: number) => {
     setLastScore(score);
+    setBestScore((prev) => Math.max(prev, score));
     setScreen("gameover");
   };
 
-  const returnToMenu = () => setScreen("menu");
+  const handleRestart = () => {
+    setScreen("game");
+  };
 
-  if (screen === "menu") return <MainMenu onStart={startGame} />;
-  if (screen === "game")
-    return <NeonGame onGameOver={endGame} />;
+  const handleBackToMenu = () => {
+    setScreen("menu");
+  };
 
-  return <GameOver score={lastScore} onRestart={startGame} onMenu={returnToMenu} />;
-}
+  return (
+    <SafeAreaView style={styles.root}>
+      <StatusBar barStyle="light-content" />
+      {screen === "menu" && (
+        <MainMenu bestScore={bestScore} onStart={handleStart} />
+      )}
+      {screen === "game" && <NeonGame onGameOver={handleGameOver} />}
+      {screen === "gameover" && (
+        <GameOver
+          score={lastScore}
+          bestScore={bestScore}
+          onRestart={handleRestart}
+          onMenu={handleBackToMenu}
+        />
+      )}
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#02020A",
+  },
+});
+
+export default AppRoot;

@@ -1,38 +1,28 @@
 // src/ui/Settings.tsx
 
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Switch } from "react-native";
-import type { DayNightMode } from "../game/DayNightManager";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Switch, TouchableOpacity } from "react-native";
 
 type Props = {
-  soundEnabled: boolean;
-  onToggleSound: () => void;
-  dayNightMode: DayNightMode;
-  onCycleDayNight: () => void;
   onBack: () => void;
 };
 
-export default function Settings({
-  soundEnabled,
-  onToggleSound,
-  dayNightMode,
-  onCycleDayNight,
-  onBack,
-}: Props) {
+const Settings: React.FC<Props> = ({ onBack }) => {
+  const [sound, setSound] = useState(true);
+  const [haptics, setHaptics] = useState(true);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>SETTINGS</Text>
 
       <View style={styles.row}>
         <Text style={styles.label}>Sound</Text>
-        <Switch value={soundEnabled} onValueChange={onToggleSound} />
+        <Switch value={sound} onValueChange={setSound} />
       </View>
 
       <View style={styles.row}>
-        <Text style={styles.label}>Day / Night</Text>
-        <TouchableOpacity style={styles.modeButton} onPress={onCycleDayNight}>
-          <Text style={styles.modeText}>{dayNightMode.toUpperCase()}</Text>
-        </TouchableOpacity>
+        <Text style={styles.label}>Haptics</Text>
+        <Switch value={haptics} onValueChange={setHaptics} />
       </View>
 
       <TouchableOpacity style={styles.backButton} onPress={onBack}>
@@ -40,7 +30,9 @@ export default function Settings({
       </TouchableOpacity>
     </View>
   );
-}
+};
+
+export default Settings;
 
 const styles = StyleSheet.create({
   container: {
@@ -58,26 +50,15 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 18,
+    justifyContent: "space-between",
+    paddingVertical: 12,
   },
   label: {
-    flex: 1,
     color: "#FFFFFF",
     fontSize: 16,
   },
-  modeButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    borderWidth: 2,
-    borderColor: "#00E5FF",
-  },
-  modeText: {
-    color: "#00E5FF",
-    fontWeight: "bold",
-  },
   backButton: {
-    marginTop: 24,
+    marginTop: 40,
     alignSelf: "center",
     paddingVertical: 10,
     paddingHorizontal: 40,

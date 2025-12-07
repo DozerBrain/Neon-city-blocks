@@ -2,19 +2,17 @@
 
 export const BLOCK_SIZE = 60;
 
-// One block in the tower
+// Single tower block
 export type TowerBlock = {
   id: number;
-  level: number; // 0 = sitting on platform
-  x: number;     // center position inside the play area (0..GAME_WIDTH)
+  level: number; // 0 = base on the platform
+  x: number;     // center X in game coords
 };
 
-// How far from previous center we still allow a hit
-const MISS_THRESHOLD_MULTIPLIER = 0.7;
+// how far you can miss before it's a fail
+const MISS_THRESHOLD = BLOCK_SIZE * 0.7;
 
-/**
- * Initial tower: single block on the platform center.
- */
+// ----- CREATE INITIAL TOWER -----
 export function createInitialTower(centerX: number): TowerBlock[] {
   return [
     {
@@ -25,76 +23,71 @@ export function createInitialTower(centerX: number): TowerBlock[] {
   ];
 }
 
-/**
- * Compute where a new block lands relative to the tower.
- * Returns:
- *  - updated blocks if hit
- *  - miss = true if we should trigger game over
- *  - dx = horizontal difference from previous block
- */
+// ----- GEOMETRY HELPERS -----
+export function getBlockTopY(platformY: number, level: number): number {
+  // top of level 0 block sits exactly one BLOCK_SIZE above platform
+  return platformY - BLOCK_SIZE - level * BLOCK_SIZE;
+}
+
+// ----- LANDING RESULT TYPE -----
+export type LandResult = {
+  blocks: TowerBlock[];
+  dx: number;   // horizontal offset from previous top block
+  miss: boolean;
+};
+
+// ----- LAND BLOCK LOGIC -----
+// IMPORTANT: this is where we *keep* the dropX so it doesn't snap to center
 export function landBlock(
   currentBlocks: TowerBlock[],
   dropX: number
-): { blocks: TowerBlock[]; miss: boolean; dx: number } {
+): LandResult {
   const top = currentBlocks[currentBlocks.length - 1];
   const dx = dropX - top.x;
-  const missThreshold = BLOCK_SIZE * MISS_THRESHOLD_MULTIPLIER;
 
-  if (Math.abs(dx) > missThreshold) {
+  // Miss → tell caller it's a fail, don't change blocks
+  if (Math.abs(dx) > MISS_THRESHOLD) {
     return {
       blocks: currentBlocks,
-      miss: true,
       dx,
+      miss: true,
     };
   }
 
   const newBlock: TowerBlock = {
     id: Date.now(),
-    level: currentBlocks.length,
-    x: dropX,
+    level: top.level + 1,
+    x: dropX, // ← KEY: use the actual drop position, not top.x
   };
 
   return {
     blocks: [...currentBlocks, newBlock],
-    miss: false,
     dx,
+    miss: false,
   };
 }
 
-/**
- * Y position (top) for a given block level inside the play area.
- */
-export function getBlockTopY(platformY: number, level: number): number {
-  // Platform is at platformY, block sits above it.
-  return platformY - BLOCK_SIZE * (level + 1);
+// ----- SCORE HELPERS -----
+export type ScoreState = {
+  score: number;
+  best: number;
+};
+
+export function updateScore(score: number, best: number): ScoreState {
+  const newScore = score + 1;
+  const newBest = Math.max(best, newScore);
+  return { score: newScore, best: newBest };
 }
 
-/**
- * Score + best score update after a successful drop.
- */
-export function updateScore(
-  currentScore: number,
-  currentBest: number
-): { score: number; best: number } {
-  const score = currentScore + 1;
-  return {
-    score,
-    best: Math.max(currentBest, score),
-  };
-}
-
-/**
- * Compute tilt value in range -1..1 based on tower height and how off-center the drop is.
- */
-export function computeTilt(
-  blockCount: number,
-  dx: number
-): number {
-  const missThreshold = BLOCK_SIZE * MISS_THRESHOLD_MULTIPLIER;
-
-  // Start caring about tilt after a few blocks
-  const heightFactor = Math.max(0, Math.min(1, (blockCount - 4) / 10));
-  const offsetFactor = Math.min(1, Math.abs(dx) / missThreshold);
+// ----- TILT COMPUTATION -----
+// returns value in [-1, 1], controller turns that into degrees
+export function computeTilt(height: number, dx: number): number {
+  const TILT_TRIGGER_HEIGHT = 4; // when tower tall enough
+  const heightFactor = Math.max(
+    0,
+    Math.min(1, (height - TILT_TRIGGER_HEIGHT) / 10)
+  );
+  const offsetFactor = Math.min(1, Math.abs(dx) / MISS_THRESHOLD);
   const direction = dx === 0 ? 0 : dx > 0 ? 1 : -1;
 
   return direction * heightFactor * offsetFactor; // -1..1
